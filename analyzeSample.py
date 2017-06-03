@@ -1,20 +1,24 @@
 import numpy as np
+from getPath import *
 
-path = 'D:/cikm/datasets/data_new/CIKM2017_train/train.txt'
-base_path = 'D:/cikm/datasets/data/'
+pardir = getparentdir()
+
+path = pardir+'/datasets/train/train.txt'
+base_path = pardir+'/datasets/data/'
 
 def distribution():
-    # f = open(path,"r")  
     i = 0
-    # lines = f.readlines()
+    j=1
+    totalline = ""
     with open(path,"r") as f:
         for line in f:
-            f2=open(base_path+str(i)+'.txt',"w")
-            f2.write(line.strip('\n'))
-            f2.close()
-            i+=1
-            if i==5:
+            totalline+=line
+            if i%50==0 and not i==0:
+                f2=open(base_path+str(j)+'.txt',"w")
+                f2.write(totalline)
+                f2.close()
+                j+=1
                 break
-        
+            i+=1
 if __name__=="__main__":
     distribution()
