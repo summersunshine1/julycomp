@@ -10,19 +10,13 @@ from sklearn.model_selection import KFold
 from sklearn.externals import joblib
 
 from getPath import *
+from commonLib import *
 pardir = getparentdir()
 
 learning_rate = 0.01
 training_epochs = 1000
 datadir = pardir+'/datasets/data/'
 input_nodes = 15*4*101*101
-
-def listfiles():
-    list_dirs = os.walk(datadir) 
-    filepath_list = []
-    for root, dirs, files in list_dirs:
-        for f in files:
-            filepath_list.append(os.path.join(root,f))
     return filepath_list
 
 def getTrainData(path):
@@ -45,7 +39,7 @@ def createmodel():
     pred = tf.add(tf.matmul(x,w),b)
     cost = tf.reduce_mean(tf.pow(pred - y, 2))/2
     train_op =  tf.train.AdamOptimizer(learning_rate).minimize(cost) 
-    file_list = listfiles()
+    file_list = listfiles(datadir)
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         for file in file_list:
@@ -83,7 +77,7 @@ def rmse(predict_y,ground_y):
     return score
 
 def createlinearmodel():
-    file_list = listfiles()
+    file_list = listfiles(datadir)
     train_files,test_files = split_train_test(file_list,0.9)
     train_indexs,test_indexs = cross_validation_split(train_files,10)
     model = SGDRegressor()
@@ -137,7 +131,7 @@ def createlinearmodel():
     # print(np.sqrt(np.mean(np.power(ground_y - predict_y, 2))))  
 
 def continue_train():
-    file_list = listfiles()
+    file_list = listfiles(datadir)
     train_files,test_files = split_train_test(file_list,0.9)
     path = pardir+'/julycomp/model/lr.pkl'
     model = joblib.load(path)

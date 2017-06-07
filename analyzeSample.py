@@ -4,10 +4,10 @@ from getPath import *
 pardir = getparentdir()
 
 path = pardir+'/datasets/train/train.txt'
-base_path = pardir+'/datasets/data/'
+base_path = pardir+'/datasets/datatrain/'
 
-path = pardir+'/datasets/test/testA.txt'
-base_path = pardir+'/datasets/datatest/'
+# path = pardir+'/datasets/test/testA.txt'
+# base_path = pardir+'/datasets/datatest/'
 
 def distribution():
     i = 0
