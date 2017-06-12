@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 from pylab import *
+import time
 
 from commonLib import *
 from getPath import *
@@ -46,9 +47,33 @@ def showImg(path):
             plt.imshow(img)
             plt.title("time:"+str(i+1)+" height:"+str(j))
         plt.show()
+        
+def showPrecipitation():
+    file_list = listfiles(datadir)
+    arr_y = []
+    i = 0
+    duration = 0
+    for file in file_list:
+        start_time = time.time()
+        x,y = getTrainData(file)
+        duration += time.time()-start_time
+        if i%100==0:
+            print(str(i)+":"+str(duration))
+            duration = 0
+        arr_y.append(y[0])
+        i+=1
+    plt.hist(arr_y)
+    plt.show()
+        # i+=10
+        # if i>5000:
+            # break
+    # plt.hist(arr_y)
+    # plt.show()
+    
 
 if __name__=="__main__":
-    showImg(datadir+'1.txt')
+    # showImg(datadir+'1.txt')
+    showPrecipitation()
     
 	
 
