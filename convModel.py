@@ -27,13 +27,13 @@ pool1 = 2
 pool2 = 2
 
 fc_hidden_num = 1024
+# fc1_hidden_num = 1024
 
-learning_rate = 0.1
-batch_size = 32
-dropout_prob = 0.5
-h_pool2_size = 26*26*64
+learning_rate = 1e-4
+batch_size = 64
+dropout_prob = 0.75
 channels = 15*4
-epochs = 100
+epochs = 20
 
 def getTrainData(path):
     x = []
@@ -103,6 +103,16 @@ def covNetwork():
     w_fc2 = weight_variable([fc_hidden_num, category])
     # w_fc2 = variable_with_weight_loss([fc_hidden_num, category],stddev=0.04, w1 = 0.004)
     bias_fc2 = bias_variable([category])
+    # h_fc2 = tf.nn.relu(tf.matmul(h_fc1_drop, w_fc2) + bias_fc2)
+    # h_fc2_drop = tf.nn.dropout(h_fc2, keep_prob)
+    # w_fc3 = weight_variable([fc1_hidden_num, category])
+    # w_fc2 = variable_with_weight_loss([fc_hidden_num, category],stddev=0.04, w1 = 0.004)
+    # bias_fc3 = bias_variable([category])
+    # h_fc3 = tf.nn.relu(tf.matmul(h_fc2_drop, w_fc3) + bias_fc3)
+    # h_fc3_drop = tf.nn.dropout(h_fc3, keep_prob)
+    # w_fc4 = weight_variable([fc3_hidden_num, category])
+    # w_fc2 = variable_with_weight_loss([fc_hidden_num, category],stddev=0.04, w1 = 0.004)
+    # bias_fc4 = bias_variable([category])
     
     if category>1:
         y_conv = tf.nn.softmax(tf.matmul(h_fc1_drop, w_fc2) + bias_fc2) 
@@ -129,20 +139,24 @@ def covNetwork():
     print(type(dropout_prob))
     for file in file_list:
         train_x,train_y = getTrainData(file)
-        if i%32==0 and not i==0:
+        if i%batch_size==0 and not i==0:
             for k in range(epochs):
                 x_arr = np.array(x_arr)
                 y_arr = np.array(y_arr)
                 # print(x_arr.shape)
                 # print(y_arr.shape)
                 train_step.run(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
-                train_accuracy = accuracy.eval(feed_dict = {x:x_arr,y:y_arr,keep_prob:1})
+                # y_value = y_conv.eval(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
+                train_accuracy = accuracy.eval(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
                     # pool2_value = h_pool2_flat.eval(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
                     # pool2_value = pool2_value.reshape([batch_size,208,208])
                     # for j in range(batch_size):
                         # print(pool2_value[j,:,:])
-                    
-                print("step %d, epoch %d, accuracy %g"%(i/32,k,train_accuracy))
+                # print("predict")
+                # print(y_value)  
+                # print("real")
+                # print(y_arr)
+                print("step %d, epoch %d, accuracy %g"%(i/batch_size,k,train_accuracy))
             x_arr = []
             y_arr = []
         x_arr.append(train_x)

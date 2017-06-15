@@ -17,7 +17,6 @@ learning_rate = 0.01
 training_epochs = 1000
 datadir = pardir+'/datasets/data/'
 input_nodes = 15*4*101*101
-    return filepath_list
 
 def getTrainData(path):
     x = []
@@ -27,7 +26,7 @@ def getTrainData(path):
             arr = line.split(',')
             x.append(arr[2].split())
             y.append([float(arr[1])])
-    x = preprocessing.scale(x)
+    # x = preprocessing.scale(x)
     y = np.array(y)
     return x,y
     
@@ -154,9 +153,32 @@ def continue_train():
     print("final result" +str(score))
     # joblib.dump(model, path)
     
+def get_pca_data(path):
+    y_arr = []
+    x_arr = []
+    with open(path,'r') as f:
+        for line in f:
+            arr = line.split('|')
+            y_arr.append([float(arr[0])])
+            temp = [float(t) for t in arr[1].split(';')]
+            x_arr.append(temp)
+    y_arr = np.array(y_arr)
+    return x_arr,y_arr
+    
+def create_one_model():
+    datapath = pardir+'/julycomp/pca.txt'
+    x_arr,y_arr = get_pca_data(datapath)
+    clf = LinearSVR(C=1, epsilon=0.1)
+    clf.fit(x_arr, y_arr.ravel()) 
+    score = make_scorer(rmse, greater_is_better=False)
+    scores = -cross_val_score(clf, x_arr,y_arr.ravel(),cv=10, scoring = score)
+    print(scores)
+    path = pardir+'/julycomp/model/onelr.pkl'
+    joblib.dump(clf, path)
+    
 if __name__=="__main__":
     # createlinearmodel()
-    continue_train()        
+    create_one_model()        
 
     
                 
