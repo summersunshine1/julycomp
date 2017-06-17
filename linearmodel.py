@@ -11,6 +11,7 @@ from sklearn.externals import joblib
 
 from getPath import *
 from commonLib import *
+from data_analyse import *
 pardir = getparentdir()
 
 learning_rate = 0.01
@@ -166,13 +167,13 @@ def get_pca_data(path):
     return x_arr,y_arr
     
 def create_one_model():
-    datapath = pardir+'/julycomp/pca.txt'
-    x_arr,y_arr = get_pca_data(datapath)
+    # datapath = pardir+'/julycomp/pca.txt'
+    x_arr,y_arr = goal_position()
     clf = LinearSVR(C=1, epsilon=0.1)
     clf.fit(x_arr, y_arr.ravel()) 
     score = make_scorer(rmse, greater_is_better=False)
     scores = -cross_val_score(clf, x_arr,y_arr.ravel(),cv=10, scoring = score)
-    print(scores)
+    print(np.mean(scores))
     path = pardir+'/julycomp/model/onelr.pkl'
     joblib.dump(clf, path)
     

@@ -4,8 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 from pylab import *
-
-# from sklearn import preprocessing
+from sklearn.preprocessing import OneHotEncoder
+import pandas as pd
 
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -16,7 +16,6 @@ datadir = pardir+'/datasets/datatrain/'
 from commonLib import *
 
 pic_size = 101
-category = 1
 
 conv1_kernal_size = 5
 conv2_kernal_size = 5
@@ -30,11 +29,33 @@ fc_hidden_num = 1024
 # fc1_hidden_num = 1024
 
 learning_rate = 1e-4
-batch_size = 64
+batch_size = 16
 dropout_prob = 0.75
-channels = 15*4
+channels = 4
+pic_length = 15
 epochs = 20
 
+def encoder(arr,bins):
+    ohe = OneHotEncoder(sparse=False,n_values = bins)#categorical_features='all',
+    ohe.fit(arr)
+    return ohe.transform(arr) 
+
+def get_y():
+    path = pardir+'/julycomp/precip.txt'
+    with open(path,'r') as fw:
+        for line in fw:
+            arr = line.split(',')
+    arr = [float(t) for t in arr]
+    bins_ = int(np.max(arr)-np.min(arr))
+    labels_ = []
+    for i in range(bins_):
+        labels_.append(i)
+    out = pd.cut(arr,bins = int((np.max(arr)-np.min(arr))),labels = labels_,include_lowest=True)
+    out = [[o] for o in out]
+    out = encoder(out,bins_)
+    print(len(out[0]))
+    return out,bins_
+    
 def getTrainData(path):
     x = []
     y = []
@@ -43,14 +64,16 @@ def getTrainData(path):
             arr = line.split(',')
             x_temp = arr[2].split()
             x = [float(t) for t in x_temp]
-            x = zeroNormalize(x)
-            # j=0
-            # while j<len(x_temp):
-                # x.append([float(t) for t in x_temp[j:j+pic_size*pic_size]])
-                # j += pic_size*pic_size
-            y.append(float(arr[1]))
-    x = np.array(x)
-    y = np.array(y)
+            c_x = []
+            k = 0
+            for i in range(channels):
+                for j in range(pic_length):
+                    tempindex = j*channels + i
+                    img = x[tempindex*101*101:(tempindex+1)*101*101]
+                    c_x = c_x+img
+            # y.append(float(arr[1]))
+    x = np.array(c_x)
+    # y = np.array(y)
     return x,y
     
 def variable_with_weight_loss(shape, stddev, w1):
@@ -69,15 +92,17 @@ def bias_variable(shape):
     return tf.Variable(initial)
     
 def conv2d(x,w):
-    return tf.nn.conv2d(x,w,[1,1,1,1],padding = 'SAME')#batch height width channel
+    return tf.nn.conv2d(x,w,[1,4,4,1],padding = 'SAME')#batch height width channel
     
 def max_pool(x,klen):
     return tf.nn.max_pool(x,ksize = [1,klen,klen,1], strides = [1,klen,klen,1],padding = 'SAME')
     
 def covNetwork():
-    x = tf.placeholder(tf.float32,[batch_size,pic_size*pic_size*channels])
-    y = tf.placeholder(tf.float32,shape = [batch_size])
-    x_img = tf.reshape(x,[-1, pic_size, pic_size, channels])
+    train_y, category = get_y()
+    
+    x = tf.placeholder(tf.float32,[batch_size,pic_size*pic_size*pic_length*channels])
+    y = tf.placeholder(tf.float32,shape = [batch_size, category])
+    x_img = tf.reshape(x,[-1, pic_size, pic_size*pic_length, channels])
     
     w_conv1 = weight_variable([conv1_kernal_size, conv1_kernal_size, channels, conv1_num])
     b_conv1 = bias_variable([conv1_num])
@@ -116,7 +141,7 @@ def covNetwork():
     
     if category>1:
         y_conv = tf.nn.softmax(tf.matmul(h_fc1_drop, w_fc2) + bias_fc2) 
-        cross_entropy = tf.reduce_mean(-tf.reduce_sum(y*y_conv),reduction_indices = [1])
+        cross_entropy = tf.reduce_mean(-tf.reduce_sum(y*tf.log(y_conv),reduction_indices = [1]))
     else:
         y_conv = tf.matmul(h_fc1_drop, w_fc2) + bias_fc2
         cross_entropy = tf.reduce_sum(tf.pow(y-y_conv,2))
@@ -124,8 +149,8 @@ def covNetwork():
             # loss = tf.add_n(tf.get_collection('losses'))
     train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
     if category>1:
-        correct_prediction = tf.equal(tf.argmax(y_conv,1),tf,argmax(y,1))
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction),tf.float32)
+        correct_prediction = tf.equal(tf.argmax(y_conv,1),tf.argmax(y,1))
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction,tf.float32))
     else:
         accuracy = tf.reduce_mean(tf.reduce_sum(tf.pow(y-y_conv,2)))
 
@@ -134,35 +159,24 @@ def covNetwork():
     tf.global_variables_initializer().run()
     file_list = listfiles(datadir)
     i = 0
+    
     x_arr = []
     y_arr = []
-    print(type(dropout_prob))
-    for file in file_list:
-        train_x,train_y = getTrainData(file)
-        if i%batch_size==0 and not i==0:
-            for k in range(epochs):
+    for k in range(epochs):
+        for file in file_list:
+            train_x,_ = getTrainData(file)
+            if i%batch_size==0 and not i==0:
                 x_arr = np.array(x_arr)
                 y_arr = np.array(y_arr)
-                # print(x_arr.shape)
-                # print(y_arr.shape)
                 train_step.run(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
-                # y_value = y_conv.eval(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
                 train_accuracy = accuracy.eval(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
-                    # pool2_value = h_pool2_flat.eval(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
-                    # pool2_value = pool2_value.reshape([batch_size,208,208])
-                    # for j in range(batch_size):
-                        # print(pool2_value[j,:,:])
-                # print("predict")
-                # print(y_value)  
-                # print("real")
-                # print(y_arr)
                 print("step %d, epoch %d, accuracy %g"%(i/batch_size,k,train_accuracy))
-            x_arr = []
-            y_arr = []
-        x_arr.append(train_x)
-        y_arr.append(train_y[0])
-        i+=1
-        # print("train file "+str(i))
+                x_arr = []
+                y_arr = []
+            x_arr.append(train_x)
+            y_arr.append(train_y[i])
+            i+=1
+            # print("train file "+str(i))
     save_path = saver.save(sess, pardir+"/julycomp/model/cnn.ckpt")
     sess.close()
     
