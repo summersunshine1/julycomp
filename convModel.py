@@ -212,7 +212,7 @@ def covNetwork():
     x_arr = []
     y_arr = []
     t_count = 0
-    for k in range(1):
+    for k in range(epochs):
         i = 0
         for file in file_list:
             train_x,_ = getTrainData(file)
