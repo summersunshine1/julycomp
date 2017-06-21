@@ -147,13 +147,13 @@ def read_preci():
     # plt.show()
 
 if __name__=="__main__":
-    # file_list = listfiles(datadir) 
-    # for file in file_list:
-        # showImg(file)
+    file_list = listfiles(datadir) 
+    for file in file_list:
+        showImg(file)
     # showImg(datadir+'1.txt')
     # pca_analyze()
     # showPrecipitation()
-    read_preci()
+    # read_preci()
 	
 
 	

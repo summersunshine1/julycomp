@@ -20,10 +20,10 @@ from commonLib import *
 
 pic_size = 101
 
-conv1_kernal_size = 5
-conv2_kernal_size = 5
-conv1_num = 32
-conv2_num = 64
+conv1_kernal_size = 101
+conv2_kernal_size = 3
+conv1_num = 64
+conv2_num = 16
 
 pool1 = 2
 pool2 = 2
@@ -32,18 +32,19 @@ fc_hidden_num = 1024
 # fc1_hidden_num = 1024
 
 # learning_rate = 1e-4
-batch_size = 16
+batch_size = 32
 dropout_prob = 0.75
 channels = 4
 pic_length = 15
 epochs = 20
-strides = 2
+strides_1 = 101
+strides_2 = 1
 
 def batchnorm(Ylogits, is_test, iteration, offset):
     y_shape = Ylogits.get_shape()
     axis = list(range(len(y_shape) - 1))
 
-    exp_moving_avg = tf.train.ExponentialMovingAverage(0.999, iteration) # adding the iteration prevents from averaging across non-existing iterations
+    exp_moving_avg = tf.train.ExponentialMovingAverage(0.999) # adding the iteration prevents from averaging across non-existing iterations
     bnepsilon = 1e-5
     mean, variance = tf.nn.moments(Ylogits, axis)
     update_moving_everages = exp_moving_avg.apply([mean, variance])#adds shadow copies of trained variables and add ops that maintain a moving average of the trained variables in their shadow copies
@@ -71,7 +72,7 @@ def get_y():
     out = [[o] for o in out]
     out = encoder(out,bins_)
     print(len(out[0]))
-    return out,bins_
+    return out,bins_,arr
     
 def getTrainData(path):
     x = []
@@ -108,7 +109,7 @@ def bias_variable(shape):
     initial = tf.constant(0.1,shape = shape)
     return tf.Variable(initial)
     
-def conv2d(x,w):
+def conv2d(x,w,strides):
     return tf.nn.conv2d(x,w,[1,strides,strides,1],padding = 'SAME')#batch height width channel
     
 def max_pool(x,klen):
@@ -118,7 +119,7 @@ def print_tensor(t):
     print(t.get_shape().as_list())
     
 def covNetwork():
-    train_y, category = get_y()
+    train_y, category,_ = get_y()
     max_learning_rate = 0.02
     min_learning_rate = 0.0001
     decay_speed = 1600
@@ -134,7 +135,7 @@ def covNetwork():
     w_conv1 = weight_variable([conv1_kernal_size, conv1_kernal_size, channels, conv1_num])
     b_conv1 = bias_variable([conv1_num])
     
-    h_conv1 = conv2d(x_img, w_conv1)
+    h_conv1 = conv2d(x_img, w_conv1, strides_1)
     x1bn,update_ema1   = batchnorm(h_conv1, tst, iter, b_conv1)
     h_conv1 = tf.nn.relu(x1bn)
     
@@ -144,7 +145,7 @@ def covNetwork():
     
     w_conv2 = weight_variable([conv2_kernal_size, conv2_kernal_size, conv1_num, conv2_num])
     b_conv2 = bias_variable([conv2_num])
-    h_conv2 = conv2d(h_pool1, w_conv2)
+    h_conv2 = conv2d(h_pool1, w_conv2, strides_2)
     x2bn, update_ema2  = batchnorm(h_conv2, tst, iter, b_conv2)
     h_conv2 = tf.nn.relu(x2bn)
     
@@ -153,8 +154,8 @@ def covNetwork():
     print_tensor(h_conv2)
     print_tensor(h_pool2)
     
-    temp_w = math.ceil(pic_size/(strides*pool1*strides*pool2))
-    temp_h = math.ceil(pic_size*pic_length/(strides*pool1*strides*pool2))
+    temp_w = math.ceil(pic_size/(strides_1*pool1*strides_2*pool2))
+    temp_h = math.ceil(pic_size*pic_length/(strides_1*pool1*strides_2*pool2))
     # print_tensor(h_conv2)
     # print_tensor(h_pool2)
     # batch_size = x.get_shape()[0]
@@ -188,7 +189,7 @@ def covNetwork():
     # bias_fc4 = bias_variable([category])
     update_ema = tf.group(update_ema1, update_ema2, update_ema3)
     if category>1:
-        y_conv = tf.nn.softmax(tf.matmul(h_fc1_drop, w_fc2) + bias_fc2) 
+        y_conv = tf.nn.softmax(tf.matmul(h_fc1, w_fc2) + bias_fc2) 
         y_res = tf.argmax(y_conv,1)
         cross_entropy = tf.reduce_mean(-tf.reduce_sum(y*tf.log(y_conv),reduction_indices = [1]))
     else:
@@ -211,36 +212,40 @@ def covNetwork():
     i = 0  
     x_arr = []
     y_arr = []
+ 
+    # for k in range(epochs):
+    i = 0
     t_count = 0
-    for k in range(epochs):
-        i = 0
-        for file in file_list:
-            train_x,_ = getTrainData(file)
-            if i%batch_size==0 and not i==0:
+    for file in file_list:
+        train_x,_ = getTrainData(file)
+        if i%batch_size==0 and not i==0:
+            for k in range(epochs):
                 x_arr = np.array(x_arr)
                 y_arr = np.array(y_arr)
                 learning_rate = min_learning_rate + (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
                 _,train_accuracy=sess.run([train_step, accuracy], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
-                sess.run(update_ema, {x:x_arr,y:y_arr, tst: False, iter: t_count, keep_prob:dropout_prob})
+                
                 # train_step.run(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
                 # train_accuracy = accuracy.eval(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
                 print("step %d, epoch %d, accuracy %g"%(i/batch_size,k,train_accuracy))
-                x_arr = []
-                y_arr = []
                 t_count+=1
-            x_arr.append(train_x)
-            y_arr.append(train_y[i])
-            i+=1   
-        
-        if len(x_arr)>0:
-            x_arr = np.array(x_arr)
-            y_arr = np.array(y_arr)
-            learning_rate = min_learning_rate + (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
-            _,train_accuracy=sess.run([train_step, accuracy], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
-            sess.run(update_ema, {x:x_arr,y:y_arr, tst: False, iter: t_count, keep_prob:dropout_prob})
-            print("final accuracy %g"%(train_accuracy))
+            t_count = 0
+            sess.run(update_ema, {x:x_arr,y:y_arr, tst: False, iter: t_count, keep_prob:dropout_prob})    
             x_arr = []
             y_arr = []
+        x_arr.append(train_x)
+        y_arr.append(train_y[i])
+        i+=1   
+    
+    if len(x_arr)>0:
+        x_arr = np.array(x_arr)
+        y_arr = np.array(y_arr)
+        learning_rate = min_learning_rate + (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
+        _,train_accuracy=sess.run([train_step, accuracy], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
+        sess.run(update_ema, {x:x_arr,y:y_arr, tst: False, iter: t_count, keep_prob:dropout_prob})
+        print("final accuracy %g"%(train_accuracy))
+        x_arr = []
+        y_arr = []
     file_list = listfiles(test_data_dir)
     res = []
     for file in file_list:
