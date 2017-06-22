@@ -32,7 +32,7 @@ fc_hidden_num = 1024
 # fc1_hidden_num = 1024
 
 # learning_rate = 1e-4
-batch_size = 32
+batch_size = 64
 dropout_prob = 0.75
 channels = 4
 pic_length = 15
@@ -213,34 +213,32 @@ def covNetwork():
     x_arr = []
     y_arr = []
  
-    # for k in range(epochs):
-    i = 0
-    t_count = 0
-    for file in file_list:
-        train_x,_ = getTrainData(file)
-        if i%batch_size==0 and not i==0:
-            for k in range(epochs):
+    for k in range(epochs):
+        i = 0
+        t_count = 0
+        for file in file_list:
+            train_x,_ = getTrainData(file)
+            if i%batch_size==0 and not i==0:
                 x_arr = np.array(x_arr)
                 y_arr = np.array(y_arr)
-                learning_rate = min_learning_rate + (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
-                _,train_accuracy=sess.run([train_step, accuracy], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
-                
+                learning_rate = min_learning_rate #+ (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
+                _,train_accuracy,loss=sess.run([train_step, accuracy,cross_entropy], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
+                sess.run(update_ema, {x:x_arr,y:y_arr, tst: False, iter: t_count, keep_prob:dropout_prob}) 
+                x_arr = []
+                y_arr = []
                 # train_step.run(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
                 # train_accuracy = accuracy.eval(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
-                print("step %d, epoch %d, accuracy %g"%(i/batch_size,k,train_accuracy))
+                print("step %d, epoch %d, accuracy %g,loss %g"%(i/batch_size,k,train_accuracy,loss))
                 t_count+=1
-            t_count = 0
-            sess.run(update_ema, {x:x_arr,y:y_arr, tst: False, iter: t_count, keep_prob:dropout_prob})    
-            x_arr = []
-            y_arr = []
-        x_arr.append(train_x)
-        y_arr.append(train_y[i])
-        i+=1   
+       
+            x_arr.append(train_x)
+            y_arr.append(train_y[i])
+            i+=1
     
     if len(x_arr)>0:
         x_arr = np.array(x_arr)
         y_arr = np.array(y_arr)
-        learning_rate = min_learning_rate + (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
+        learning_rate = min_learning_rate #+ (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
         _,train_accuracy=sess.run([train_step, accuracy], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
         sess.run(update_ema, {x:x_arr,y:y_arr, tst: False, iter: t_count, keep_prob:dropout_prob})
         print("final accuracy %g"%(train_accuracy))
