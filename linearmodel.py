@@ -16,8 +16,9 @@ pardir = getparentdir()
 
 learning_rate = 0.01
 training_epochs = 1000
-datadir = pardir+'/datasets/data/'
+datadir = pardir+'/datasets/datatrain/'
 input_nodes = 15*4*101*101
+test_datadir = pardir+'/datasets/datatest/'
 
 def getTrainData(path):
     x = []
@@ -25,7 +26,9 @@ def getTrainData(path):
     with open(path,'r') as f:
         for line in f:
             arr = line.split(',')
-            x.append(arr[2].split())
+            temp = arr[2].split()
+            temp = [float(t) for t in temp]
+            x.append(temp)
             y.append([float(arr[1])])
     # x = preprocessing.scale(x)
     y = np.array(y)
@@ -177,9 +180,32 @@ def create_one_model():
     path = pardir+'/julycomp/model/onelr.pkl'
     joblib.dump(clf, path)
     
+def predict():
+    path = pardir+'/julycomp/model/lr.pkl'
+    model = joblib.load(path)
+    file_list = listfiles(test_datadir)
+    for file in file_list:
+        predict_y = []
+        ground_y = []
+        train_x,train_y = getTrainData(file)
+        ground_y.append(train_y)
+        # print(train_x)
+        predict_y.append(model.predict(train_x))
+        # score = rmse(predict_y,ground_y)
+        # print(score)
+    writeres(predict_y)
+        
+def writeres(res):
+    result_path = pardir+'datasets/test/reslinear.csv'
+    f=open(result_path,"w")
+    for r in res:
+        f.writelines(str(r)+'\n')
+    f.close()
+
 if __name__=="__main__":
     # createlinearmodel()
-    create_one_model()        
+    # create_one_model() 
+    predict()
 
     
                 

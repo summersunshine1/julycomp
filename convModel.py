@@ -121,7 +121,7 @@ def print_tensor(t):
 def covNetwork():
     train_y, category,_ = get_y()
     max_learning_rate = 0.02
-    min_learning_rate = 0.0001
+    min_learning_rate = 0.001
     decay_speed = 1600
     
     tst = tf.placeholder(tf.bool)
@@ -230,11 +230,9 @@ def covNetwork():
                 # train_accuracy = accuracy.eval(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
                 print("step %d, epoch %d, accuracy %g,loss %g"%(i/batch_size,k,train_accuracy,loss))
                 t_count+=1
-       
             x_arr.append(train_x)
             y_arr.append(train_y[i])
             i+=1
-    
     if len(x_arr)>0:
         x_arr = np.array(x_arr)
         y_arr = np.array(y_arr)
@@ -244,15 +242,15 @@ def covNetwork():
         print("final accuracy %g"%(train_accuracy))
         x_arr = []
         y_arr = []
+    save_path = saver.save(sess, pardir+"/julycomp/model/cnn.ckpt")
     file_list = listfiles(test_data_dir)
     res = []
     for file in file_list:
         test_arr,_ = getTrainData(file)
         predict_y = y_res.eval(feed_dict = {x:[test_arr],keep_prob:1, iter:t_count,tst:True})
         res.append(predict_y[0])
+    sess.close()
     writeres(res)
-    # save_path = saver.save(sess, pardir+"/julycomp/model/cnn.ckpt")
-    # sess.close()
     
 def writeres(res):
     f=open(result_path,"w")
