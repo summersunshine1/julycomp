@@ -184,21 +184,32 @@ def predict():
     path = pardir+'/julycomp/model/lr.pkl'
     model = joblib.load(path)
     file_list = listfiles(test_datadir)
+    i = 0
+    predict_y = []
     for file in file_list:
-        predict_y = []
-        ground_y = []
+
+        # ground_y = []
         train_x,train_y = getTrainData(file)
-        ground_y.append(train_y)
-        # print(train_x)
-        predict_y.append(model.predict(train_x))
+        # ground_y.append(train_y)
+        # print(tratin_x)
+        temp =model.predict(train_x)
+        predict_y.append(temp[0])
+        print(temp[0])
+        # predict_y.append(14.0922865451)
+        # print(i)
+        i+=1
         # score = rmse(predict_y,ground_y)
         # print(score)
+        # if i == 3:
+            # break
+    # print(predict_y)
     writeres(predict_y)
         
 def writeres(res):
-    result_path = pardir+'datasets/test/reslinear.csv'
+    result_path = pardir+'/datasets/test/reslinear.csv'
     f=open(result_path,"w")
     for r in res:
+        # print(r)
         f.writelines(str(r)+'\n')
     f.close()
 

@@ -47,8 +47,9 @@ def getTrainData(path):
             for i in range(pic_length):
                 x_arr.append(x[101*101*4*i:101*101*4*(i+1)])
     x_arr = np.array(x_arr)
+    print(np.shape(x_arr))
     # y = np.array(y)
-    return x
+    return x_arr
 
 def batchnorm(Ylogits, is_test, iteration, offset):
     y_shape = Ylogits.get_shape()
@@ -147,8 +148,8 @@ def conv(x_img, tst,keep_prob):
     
 
     h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
-    
-    return h_fc1_drop
+    update_ema = tf.group(update_ema1, update_ema2, update_ema3)
+    return h_fc1_drop,update_ema
     
 def printtensor(tensor):
     list = tensor.get_shape().as_list()
@@ -184,18 +185,19 @@ def convlstm():
     y = tf.placeholder(tf.float32,shape = [None, category])
     keep_prob = tf.placeholder(tf.float32)
     x_img = tf.reshape(x,[pic_length, pic_size, pic_size, channels])
-    conv_output = conv(x_img,tst,keep_prob)
+    conv_output,update_ema = conv(x_img,tst,keep_prob)
     y_pred = lstm(conv_output,category)
     printtensor(y_pred)
-    y_pred = tf.reduce_mean(y_pred, reduction_indices = [1])
-    y_res = tf.argmax(y_pred,1)
+    y_pred = tf.reduce_mean(y_pred, 0)
+    
+    y_res = tf.argmax(y_pred)
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=y_pred, labels=y))
     optimizer = tf.train.AdamOptimizer(learning_rate=min_learning_rate).minimize(cost)
 
     # Evaluate model
-    correct_pred = tf.equal(tf.argmax(y_pred,1), tf.argmax(y,1))
+    correct_pred = tf.equal(tf.argmax(y_pred), tf.argmax(y,1))
     accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-    
+    saver = tf.train.Saver()
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
     file_list = listfiles(train_data_dir)
@@ -211,14 +213,14 @@ def convlstm():
             x_arr = []
             y_arr = []
             train_x= getTrainData(file)
-            x_arr.append(train_x)
             y_arr.append(train_y[i])
             # if i%batch_size==0 and not i==0:
             x_arr = np.array(x_arr)
             y_arr = np.array(y_arr)
+            print(np.shape(train_x))
             learning_rate = min_learning_rate #+ (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
-            _,train_accuracy,loss=sess.run([optimizer, accuracy,cost], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
-            sess.run(update_ema, {x:x_arr,y:y_arr, tst: False, iter: t_count, keep_prob:dropout_prob}) 
+            _,train_accuracy,loss,_=sess.run([optimizer, accuracy,cost,update_ema], feed_dict = {x:train_x,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
+            # sess.run(update_ema, {x:train_x,y:y_arr, tst: False, iter: t_count, keep_prob:dropout_prob}) 
             # train_step.run(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
             # train_accuracy = accuracy.eval(feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob})
             print("step %d, epoch %d, accuracy %g,loss %g"%(i,k,train_accuracy,loss))
@@ -241,8 +243,8 @@ def convlstm():
         # predict_y = y_res.eval(feed_dict = {x:[test_arr],keep_prob:1, iter:t_count,tst:True})
         # res.append(predict_y[0])
     # writeres(res)
-    # save_path = saver.save(sess, pardir+"/julycomp/model/cnn.ckpt")
-    # sess.close()
+    save_path = saver.save(sess, pardir+"/julycomp/model/cnnlstm.ckpt")
+    sess.close()
     
 def writeres(res):
     f=open(result_path,"w")
