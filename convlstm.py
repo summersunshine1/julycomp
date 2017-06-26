@@ -35,7 +35,7 @@ epochs = 20
 strides_1 = 4
 strides_2 = 2
 
-num_layers = 1
+num_layers = 2
 hidden_size = 300
 
 def getTrainData(path):
@@ -154,12 +154,16 @@ def printtensor(tensor):
     list = tensor.get_shape().as_list()
     print(list)
     
-def lstm(x,category):
+def lstm(x,category,keep_prob):
+    # printtensor(x) 
     x = tf.reshape(x,[pic_length,-1, fc_hidden_num])
-    
+    printtensor(x)
+    shape = x.get_shape().as_list()
     lstm_cell = rnn.BasicLSTMCell(hidden_size, forget_bias=1.0)
-    # lstm_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_cell, output_keep_prob = keep_prob)
-    # cell = tf.contrib.rnn.MultiRNNCell([lstm_cell], num_layers)
+
+    lstm_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_cell, output_keep_prob = keep_prob)
+    cell = tf.contrib.rnn.MultiRNNCell([lstm_cell], num_layers)
+    state = cell.zero_state(batch_size, tf.float32)
     # print(x.get_shape().as_list())
     # (outputs, state) = cell(x, state,)
     # x = tf.split(x,1024,1)
@@ -168,10 +172,10 @@ def lstm(x,category):
     w = weight_variable([hidden_size, category])
     b = bias_variable([category])
     for i in range(pic_length):
-        output, states = rnn.static_rnn(lstm_cell,[x[i,:,:]], dtype=tf.float32)#none*300
-        outputs.append(output[0])
+        output, state = cell(x[i,:,:],state)#none*300
+        outputs.append(output)
     # outputs = 
-    # printtensor(x)
+    printtensor(output)
     # outputs, states = rnn.static_rnn(lstm_cell,x, dtype=tf.float32)
     outputs = tf.reduce_mean(outputs, 0)
     
@@ -193,7 +197,8 @@ def convlstm():
     keep_prob = tf.placeholder(tf.float32)
     x_img = tf.reshape(x,[-1, pic_size, pic_size, channels])
     conv_output,update_ema = conv(x_img,tst,keep_prob)
-    y_pred= lstm(conv_output,category)
+    
+    y_pred= lstm(conv_output,category,keep_prob)
     # y_pred = tf.reduce_mean(y_pred, 0)
     
     y_res = tf.argmax(y_pred, 1)
@@ -211,40 +216,50 @@ def convlstm():
     x_arr = []
     y_arr = []
     t_count = 0
+    i=0
     for k in range(epochs):
-        i = 0
         for file in file_list:
             train_x= getTrainData(file)
             if i%batch_size==0 and not i==0:
                 _,train_accuracy,loss,_=sess.run([optimizer, accuracy,cost,update_ema], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
-                print("step %d, epoch %d, accuracy %g,loss %g"%(i%batch_size,k,train_accuracy,loss))
+                print("step %d, epoch %d, accuracy %g,loss %g"%(i/batch_size,k,train_accuracy,loss))
                 t_count+=1  
                 x_arr = []
                 y_arr = []
+                break
             y_arr.append(train_y[i])
             for t in train_x:
                 x_arr.append(t)
             i+=1
-
-        if len(x_arr)>0:
-            x_arr = np.array(x_arr)
-            y_arr = np.array(y_arr)
-            learning_rate = min_learning_rate #+ (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
-            _,train_accuracy,loss,_=sess.run([optimizer, accuracy,cost,update_ema], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
-            print("final accuracy %g"%(train_accuracy))
-            x_arr = []
-            y_arr = []
-            t_count+=1
-        
+        break
+        # break
+        # if len(x_arr)>0:
+            # x_arr = np.array(x_arr)
+            # y_arr = np.array(y_arr)
+            # learning_rate = min_learning_rate #+ (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
+            # _,train_accuracy,loss,_=sess.run([optimizer, accuracy,cost,update_ema], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
+            # print("final accuracy %g"%(train_accuracy))
+            # x_arr = []
+            # y_arr = []
+            # t_count+=1
     file_list = listfiles(test_data_dir)
     res = []
+    i=0
+    x_arr = []
     for file in file_list:
         test_arr= getTrainData(file)
-        x_arr = []
-        predict_y = y_res.eval(feed_dict = {x:test_arr,keep_prob:1, iter:t_count,tst:True})
-        res.append(predict_y[0])
+        if i%batch_size==0 and not i==0:
+            predict_y = y_res.eval(feed_dict = {x:test_arr,keep_prob:1, iter:t_count,tst:True})
+            print(np.shape(predict_y))
+            t_count+=1  
+            x_arr = []
+        for t in test_arr:
+            x_arr.append(t)
+        i+=1
+        # predict_y = y_res.eval(feed_dict = {x:test_arr,keep_prob:1, iter:t_count,tst:True})
+        # res.append(predict_y[0])
     writeres(res)
-    save_path = saver.save(sess, pardir+"/julycomp/model/cnnlstm.ckpt")
+    save_path = saver.save(sess, pardir+"/julycomp/model/cnnlstm1.ckpt")
     sess.close()
     
 def writeres(res):
