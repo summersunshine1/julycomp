@@ -226,12 +226,10 @@ def convlstm():
                 t_count+=1  
                 x_arr = []
                 y_arr = []
-                break
             y_arr.append(train_y[i])
             for t in train_x:
                 x_arr.append(t)
             i+=1
-        break
         # break
         # if len(x_arr)>0:
             # x_arr = np.array(x_arr)
@@ -249,17 +247,24 @@ def convlstm():
     for file in file_list:
         test_arr= getTrainData(file)
         if i%batch_size==0 and not i==0:
-            predict_y = y_res.eval(feed_dict = {x:test_arr,keep_prob:1, iter:t_count,tst:True})
+            # o = sess.run([conv_output], feed_dict = {x:test_arr,keep_prob:1, iter:t_count,tst:True})
+            # print(np.shape(o))
+            predict_y = y_res.eval(feed_dict = {x:x_arr,keep_prob:1, iter:t_count,tst:True})
             print(np.shape(predict_y))
-            t_count+=1  
+            res+=list(predict_y)
+            # t_count+=1  
             x_arr = []
         for t in test_arr:
             x_arr.append(t)
         i+=1
         # predict_y = y_res.eval(feed_dict = {x:test_arr,keep_prob:1, iter:t_count,tst:True})
         # res.append(predict_y[0])
-    writeres(res)
+    predict_y = y_res.eval(feed_dict = {x:x_arr,keep_prob:1, iter:t_count,tst:True})
+    print(np.shape(predict_y))
+    res+=list(predict_y)
     save_path = saver.save(sess, pardir+"/julycomp/model/cnnlstm1.ckpt")
+    writeres(res)
+    
     sess.close()
     
 def writeres(res):
