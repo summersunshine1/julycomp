@@ -13,7 +13,7 @@ pardir = getparentdir()
 train_data_dir = pardir+'/datasets/datatrain/'
 test_data_dir = pardir +'/datasets/datatest/'
 result_path = pardir+'/datasets/test/resconvlstm.csv'
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 pic_size = 101
 
 conv1_kernal_size = 3
@@ -154,33 +154,38 @@ def printtensor(tensor):
     list = tensor.get_shape().as_list()
     print(list)
     
-def lstm(x,category,keep_prob):
+def lstmcell(keep_prob):
+    lstm_cell = rnn.BasicLSTMCell(hidden_size, forget_bias=1.0, reuse=tf.get_variable_scope().reuse)
+    lstm_cell = tf.contrib.rnn.DropoutWrapper(lstm_cell, output_keep_prob = keep_prob)
+    return lstm_cell
+    
+def lstm(x,category,keep_prob,state_placeholder):
     # printtensor(x) 
     x = tf.reshape(x,[pic_length,-1, fc_hidden_num])
-    printtensor(x)
-    shape = x.get_shape().as_list()
-    lstm_cell = rnn.BasicLSTMCell(hidden_size, forget_bias=1.0)
-
-    lstm_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_cell, output_keep_prob = keep_prob)
-    cell = tf.contrib.rnn.MultiRNNCell([lstm_cell], num_layers)
-    state = cell.zero_state(batch_size, tf.float32)
-    # print(x.get_shape().as_list())
-    # (outputs, state) = cell(x, state,)
-    # x = tf.split(x,1024,1)
-    # print(x)
-    outputs = []
-    w = weight_variable([hidden_size, category])
-    b = bias_variable([category])
-    for i in range(pic_length):
-        output, state = cell(x[i,:,:],state)#none*300
-        outputs.append(output)
-    # outputs = 
-    printtensor(output)
-    # outputs, states = rnn.static_rnn(lstm_cell,x, dtype=tf.float32)
-    outputs = tf.reduce_mean(outputs, 0)
     
+    l = tf.unstack(state_placeholder, axis=0)
+    rnn_tuple_state = tuple([tf.contrib.rnn.LSTMStateTuple(l[idx][0], l[idx][1]) for idx in range(num_layers)])
+    with tf.variable_scope('lstm1') as scope:
+        # lstm_cell = rnn.BasicLSTMCell(hidden_size, forget_bias=1.0,state_is_tuple=True)
+        # lstm_cell = tf.contrib.rnn.DropoutWrapper(lstm_cell, output_keep_prob = keep_prob)
+        cell = tf.contrib.rnn.MultiRNNCell([lstmcell(keep_prob) for _ in range(num_layers)],state_is_tuple = True)
+        # print(x.get_shape().as_list())
+        # (outputs, state) = cell(x, state,)
+        # x = tf.split(x,1024,1)
+        # print(x)
+        outputs = []
+        w = weight_variable([hidden_size, category])
+        b = bias_variable([category])
+        for i in range(pic_length):
+            if i>0:
+                scope.reuse_variables()
+            output, rnn_tuple_state = cell(x[i,:,:],rnn_tuple_state)#none*300
+            outputs.append(output)
+    # outputs, states = rnn.static_rnn(lstm_cell,x, dtype=tf.float32)
+    # outputs = tf.reduce_mean(outputs, 0)
+    outputs = output
     # outputs, states = cell(x, state,)
-    return tf.matmul(outputs, w) + b
+    return tf.matmul(outputs, w) + b,rnn_tuple_state
     
 def convlstm():
     train_y, category,_ = get_y()
@@ -191,14 +196,17 @@ def convlstm():
     tst = tf.placeholder(tf.bool)
     iter = tf.placeholder(tf.int32)
     lr = tf.placeholder(tf.float32)
+    initialstate = state = np.zeros((num_layers, 2, batch_size, hidden_size))
+    state_placeholder = tf.placeholder(tf.float32, [num_layers, 2, batch_size, hidden_size])
     
     x = tf.placeholder(tf.float32,[None,pic_size*pic_size*channels])
     y = tf.placeholder(tf.float32,shape = [None, category])
     keep_prob = tf.placeholder(tf.float32)
+
     x_img = tf.reshape(x,[-1, pic_size, pic_size, channels])
     conv_output,update_ema = conv(x_img,tst,keep_prob)
     
-    y_pred= lstm(conv_output,category,keep_prob)
+    y_pred,rnn_tuple_state= lstm(conv_output,category,keep_prob,state_placeholder)
     # y_pred = tf.reduce_mean(y_pred, 0)
     
     y_res = tf.argmax(y_pred, 1)
@@ -221,12 +229,15 @@ def convlstm():
         for file in file_list:
             train_x= getTrainData(file)
             if i%batch_size==0 and not i==0:
-                _,train_accuracy,loss,_=sess.run([optimizer, accuracy,cost,update_ema], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
+                state,_,train_accuracy,loss,_=sess.run([rnn_tuple_state, optimizer, accuracy,cost,update_ema], 
+                feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False,state_placeholder:state})
                 print("step %d, epoch %d, accuracy %g,loss %g"%(i/batch_size,k,train_accuracy,loss))
                 t_count+=1  
                 x_arr = []
                 y_arr = []
-            y_arr.append(train_y[i])
+            if i%10000==0:
+                state = initialstate
+            y_arr.append(train_y[i%10000])
             for t in train_x:
                 x_arr.append(t)
             i+=1
