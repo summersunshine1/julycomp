@@ -38,6 +38,7 @@ strides_2 = 2
 num_layers = 2
 hidden_size = 300
 
+
 def getTrainData(path):
     x_arr = []
     with open(path,'r') as f:
@@ -164,14 +165,10 @@ def lstm(x,category,keep_prob):
     x = tf.reshape(x,[pic_length,-1, fc_hidden_num])
     # lstm_cell = rnn.BasicLSTMCell(hidden_size, forget_bias=1.0)
     with tf.variable_scope('lstm1') as scope:
-        lstm_cell = tf.contrib.rnn.BasicLSTMCell(hidden_size, forget_bias=1.0)
-        cell = tf.contrib.rnn.DropoutWrapper(lstm_cell, output_keep_prob = keep_prob)
-        # cell = tf.contrib.rnn.MultiRNNCell([lstmcell(keep_prob) for _ in range(num_layers)],state_is_tuple = True)
+        # lstm_cell = tf.contrib.rnn.BasicLSTMCell(hidden_size, forget_bias=1.0)
+        # cell = tf.contrib.rnn.DropoutWrapper(lstm_cell, output_keep_prob = keep_prob)
+        cell = tf.contrib.rnn.MultiRNNCell([lstmcell(keep_prob) for _ in range(num_layers)],state_is_tuple = True)
         state = cell.zero_state(batch_size, tf.float32)
-        # print(x.get_shape().as_list())
-        # (outputs, state) = cell(x, state,)
-        # x = tf.split(x,1024,1)
-        # print(x)
         outputs = []
         w = weight_variable([hidden_size, category])
         b = bias_variable([category])
@@ -180,8 +177,6 @@ def lstm(x,category,keep_prob):
                 scope.reuse_variables()
             output, state = cell(x[i,:,:],state)#none*300
             outputs.append(output)
-        # outputs = 
-        printtensor(output)
     # outputs, states = rnn.static_rnn(lstm_cell,x, dtype=tf.float32)
     outputs = output
     
