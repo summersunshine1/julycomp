@@ -12,6 +12,8 @@ from getPath import *
 import matplotlib.pyplot as plt
 from PIL import Image
 from pylab import *
+from sklearn import cross_validation
+
 pardir = getparentdir()
 train_data_dir = pardir+'/datasets/datatrain/'
 test_data_dir = pardir +'/datasets/datatest/'
@@ -201,7 +203,7 @@ def lstm(x,category,keep_prob,state_placeholder):
     return tf.matmul(outputs, w) + b,rnn_tuple_state
     
 def convlstm():
-    train_y, category,_ = get_y()
+    train_y, category,y_target_arr = get_y()
     max_learning_rate = 0.02
     min_learning_rate = 0.0001
     decay_speed = 1600
@@ -210,7 +212,8 @@ def convlstm():
     iter = tf.placeholder(tf.int32)
     lr = tf.placeholder(tf.float32)
     initialstate = state = np.zeros((num_layers, 2, batch_size, hidden_size))
-    state_placeholder = tf.placeholder(tf.float32, [num_layers, 2, batch_size, hidden_size])
+    test_state =  np.zeros((num_layers, 2, 1, hidden_size)) 
+    state_placeholder = tf.placeholder(tf.float32, [num_layers, 2, None, hidden_size])
     
     x = tf.placeholder(tf.float32,[None,pic_size*pic_size*channels])
     y = tf.placeholder(tf.float32,shape = [None, category])
@@ -224,7 +227,7 @@ def convlstm():
     
     y_res = tf.argmax(y_pred, 1)
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=y_pred, labels=y))
-    optimizer = tf.train.AdamOptimizer(learning_rate=min_learning_rate).minimize(cost)
+    optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(cost)
 
     # Evaluate model
     correct_pred = tf.equal(tf.argmax(y_pred,1), tf.argmax(y,1))
@@ -233,37 +236,40 @@ def convlstm():
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
     file_list = listfiles(train_data_dir)
-    learning_rate = min_learning_rate #+ (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
+    train_files,test_files,y_train,y_test = split_train_and_validate(file_list,train_y)
+    t_count = 0
     x_arr = []
     y_arr = []
-    t_count = 0
     i=0
+    train_length = len(train_files)
     for k in range(epochs):
-        for file in file_list:
+        for file in train_files:
             train_x= getTrainData(file)
             if i%batch_size==0 and not i==0:
+                learning_rate = min_learning_rate + (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
                 state,_,train_accuracy,loss,_=sess.run([rnn_tuple_state, optimizer, accuracy,cost,update_ema], 
                 feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False,state_placeholder:state})
-                print("step %d, epoch %d, accuracy %g,loss %g"%(i/batch_size,k,train_accuracy,loss))
+                print("step %d, epoch %d, accuracy %g,loss %g"%(i/batch_size,int(i/train_length),train_accuracy,loss))
                 t_count+=1  
                 x_arr = []
                 y_arr = []
-            if i%10000==0:
+            if i%train_length==0:
                 state = initialstate
-            y_arr.append(train_y[i%10000])
+                valid_arr = []
+                j = 0
+                predict_ys = []
+                ground_ys = np.argmax(y_test,1)
+                for f in test_files:
+                    valid_x = getTrainData(f)
+                    predict_y = y_res.eval(feed_dict = {x:valid_x,keep_prob:1, iter:t_count,tst:True,state_placeholder:test_state})
+                    predict_ys.append(predict_y)
+                accuracy = rmse(predict_ys,ground_ys)
+                print("epcho %d accuracy %g"%(int(i/train_length), accuracy))
+            y_arr.append(y_train[i%train_length])
             for t in train_x:
                 x_arr.append(t)
             i+=1
-        # break
-        # if len(x_arr)>0:
-            # x_arr = np.array(x_arr)
-            # y_arr = np.array(y_arr)
-            # learning_rate = min_learning_rate #+ (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
-            # _,train_accuracy,loss,_=sess.run([optimizer, accuracy,cost,update_ema], feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False})
-            # print("final accuracy %g"%(train_accuracy))
-            # x_arr = []
-            # y_arr = []
-            # t_count+=1
+        
     file_list = listfiles(test_data_dir)
     res = []
     i=0
@@ -273,7 +279,7 @@ def convlstm():
         if i%batch_size==0 and not i==0:
             # o = sess.run([conv_output], feed_dict = {x:test_arr,keep_prob:1, iter:t_count,tst:True})
             # print(np.shape(o))
-            predict_y = y_res.eval(feed_dict = {x:x_arr,keep_prob:1, iter:t_count,tst:True})
+            predict_y = y_res.eval(feed_dict = {x:x_arr,keep_prob:1, iter:t_count,tst:True,state_placeholder:initialstate})
             print(np.shape(predict_y))
             res+=list(predict_y)
             # t_count+=1  
@@ -283,13 +289,26 @@ def convlstm():
         i+=1
         # predict_y = y_res.eval(feed_dict = {x:test_arr,keep_prob:1, iter:t_count,tst:True})
         # res.append(predict_y[0])
-    predict_y = y_res.eval(feed_dict = {x:x_arr,keep_prob:1, iter:t_count,tst:True})
+    predict_y = y_res.eval(feed_dict = {x:x_arr,keep_prob:1, iter:t_count,tst:True,state_placeholder:initialstate})
     print(np.shape(predict_y))
     res+=list(predict_y)
     save_path = saver.save(sess, pardir+"/julycomp/model/cnnlstm1.ckpt")
     writeres(res)
     
     sess.close()
+    
+def split_train_and_validate(filelist,y_target_arr):
+    f_arr =[[f] for f in filelist]
+    train_files,test_files,y_train,y_test = cross_validation.train_test_split(f_arr,y_target_arr,test_size=0.05)
+    train_files = [f[0] for f in train_files]
+    test_files = [f[0] for f in test_files]
+    return train_files,test_files,y_train,y_test
+    
+def rmse(predict_y,ground_y):
+    ground_y = np.array(ground_y)
+    predict_y = np.array(predict_y)
+    score = np.sqrt(np.mean(np.power(ground_y - predict_y, 2)))
+    return score
     
 def writeres(res):
     f=open(result_path,"w")
