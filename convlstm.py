@@ -9,6 +9,9 @@ from tensorflow.contrib import rnn
 from commonLib import *
 
 from getPath import *
+import matplotlib.pyplot as plt
+from PIL import Image
+from pylab import *
 pardir = getparentdir()
 train_data_dir = pardir+'/datasets/datatrain/'
 test_data_dir = pardir +'/datasets/datatest/'
@@ -46,7 +49,17 @@ def getTrainData(path):
             x_temp = arr[2].split()
             x = [float(t) for t in x_temp]
             for i in range(pic_length):
-                x_arr.append(x[101*101*4*i:101*101*4*(i+1)])
+                temparr = []
+                for j in range(channels):
+                    index = i*channels+j
+                    temp = x[index*101*101:(index+1)*101*101]
+                    temp = np.reshape(temp,[101*101,1])
+                    temparr.append(temp)
+                arr = temparr[0]
+                for i in range(1,4):
+                    arr = np.hstack((arr, temparr[i]))
+                arr = np.reshape(arr,[101*101*4])
+                x_arr.append(arr)           
     x_arr = np.array(x_arr)
     return x_arr
 
@@ -161,7 +174,7 @@ def lstmcell(keep_prob):
     
 def lstm(x,category,keep_prob,state_placeholder):
     # printtensor(x) 
-    x = tf.reshape(x,[pic_length,-1, fc_hidden_num])
+    x = tf.reshape(x,[-1,pic_length, fc_hidden_num])
     
     l = tf.unstack(state_placeholder, axis=0)
     rnn_tuple_state = tuple([tf.contrib.rnn.LSTMStateTuple(l[idx][0], l[idx][1]) for idx in range(num_layers)])
@@ -179,7 +192,7 @@ def lstm(x,category,keep_prob,state_placeholder):
         for i in range(pic_length):
             if i>0:
                 scope.reuse_variables()
-            output, rnn_tuple_state = cell(x[i,:,:],rnn_tuple_state)#none*300
+            output, rnn_tuple_state = cell(x[:,i,:],rnn_tuple_state)#none*300
             outputs.append(output)
     # outputs, states = rnn.static_rnn(lstm_cell,x, dtype=tf.float32)
     # outputs = tf.reduce_mean(outputs, 0)
@@ -285,7 +298,15 @@ def writeres(res):
     f.close()
     
 if __name__=="__main__":
-   convlstm() 
+    convlstm() 
+    # file_list = listfiles(train_data_dir)
+    # for file in file_list:
+        # train_x= getTrainData(file)
+        # for x in train_x:
+            # print(np.shape(x))
+            # t = np.reshape(x,[101,101,4])
+            # plt.imshow(t[:,:,0])
+            # plt.show()
     
     
 
