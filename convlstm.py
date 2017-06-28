@@ -253,7 +253,7 @@ def convlstm():
                 t_count+=1  
                 x_arr = []
                 y_arr = []
-            if i%train_length==0:
+            if i%train_length==0 and not i==0:
                 state = initialstate
                 valid_arr = []
                 j = 0
@@ -263,13 +263,12 @@ def convlstm():
                     valid_x = getTrainData(f)
                     predict_y = y_res.eval(feed_dict = {x:valid_x,keep_prob:1, iter:t_count,tst:True,state_placeholder:test_state})
                     predict_ys.append(predict_y)
-                accuracy = rmse(predict_ys,ground_ys)
-                print("epcho %d accuracy %g"%(int(i/train_length), accuracy))
+                accurate = rmse(predict_ys,ground_ys)
+                print("epcho %d accuracy %g"%(int(i/train_length), accurate))
             y_arr.append(y_train[i%train_length])
             for t in train_x:
                 x_arr.append(t)
             i+=1
-        
     file_list = listfiles(test_data_dir)
     res = []
     i=0
@@ -293,8 +292,7 @@ def convlstm():
     print(np.shape(predict_y))
     res+=list(predict_y)
     save_path = saver.save(sess, pardir+"/julycomp/model/cnnlstm1.ckpt")
-    writeres(res)
-    
+    writeres(res) 
     sess.close()
     
 def split_train_and_validate(filelist,y_target_arr):
