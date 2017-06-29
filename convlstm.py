@@ -247,7 +247,7 @@ def convlstm():
             train_x= getTrainData(file)
             if i%batch_size==0 and not i==0:
                 learning_rate = min_learning_rate + (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
-                state,_,train_accuracy,loss,_=sess.run([rnn_tuple_state, optimizer, accuracy,cost,update_ema], 
+                _,train_accuracy,loss,_=sess.run([optimizer, accuracy,cost,update_ema], 
                 feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False,state_placeholder:state})
                 print("step %d, epoch %d, accuracy %g,loss %g"%(i/batch_size,int(i/train_length),train_accuracy,loss))
                 t_count+=1  
