@@ -241,8 +241,7 @@ def convlstm():
     y_arr = []
     i=0
     train_length = len(train_files)
-    print(initial_state)
-    state_value = sess.run(initial_state,feed_dict = {bs:32})
+    state_value = sess.run(initial_state,feed_dict = {bs:batch_size})
     test_state_value = sess.run(initial_state,feed_dict = {bs:1})
     for k in range(epochs):
         for file in train_files:
@@ -250,16 +249,17 @@ def convlstm():
             if i%batch_size==0 and not i==0:
                 learning_rate = min_learning_rate + (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
                 feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False}
-                
-                feed_dict[initial_state.c] = state_value[0]
-                feed_dict[initial_state.h] = state_value[1]
+                for j, (c, h) in enumerate(initial_state):
+                    feed_dict[c] = state_value[j].c
+                    feed_dict[h] = state_value[j].h
                 state_value,_,train_accuracy,loss,_=sess.run([state,optimizer, accuracy,cost,update_ema], feed_dict)
                 print("step %d, epoch %d, accuracy %g,loss %g"%(i/batch_size,int(i/train_length),train_accuracy,loss))
                 t_count+=1  
                 x_arr = []
                 y_arr = []
-                state_value = (initial_state.eval(feed_dict = {tst:False}))[0]
+                state_value = sess.run(initial_state,feed_dict = {bs:batch_size})
             if i%train_length==0 and not i==0:
+                saver.save(sess, pardir+"/julycomp/model/my-model", global_step=int(i/train_length))
                 # state = initial_state.eval()
                 valid_arr = []
                 j = 0
@@ -268,11 +268,14 @@ def convlstm():
                 for f in test_files:
                     valid_x = getTrainData(f)
                     feed_dict = {x:valid_x,keep_prob:1, iter:t_count,tst:True}
-                    feed_dict[initial_state.c] = test_state_value[0]
-                    feed_dict[initial_state.h] = test_state_value[1]
+                    for j, (c, h) in enumerate(initial_state):
+                        feed_dict[c] = test_state_value[j].c
+                        feed_dict[h] = test_state_value[j].h
+                    # feed_dict[initial_state.c] = test_state_value[0]
+                    # feed_dict[initial_state.h] = test_state_value[1]
                     predict_y = y_res.eval(feed_dict)
                     predict_ys.append(predict_y)
-                    test_state_value = (initial_state.eval(feed_dict = {tst:True}))[0]
+                test_state_value = sess.run(initial_state,feed_dict = {bs:1})
                 accurate = rmse(predict_ys,ground_ys)
                 print("epcho %d accuracy %g"%(int(i/train_length), accurate))
             y_arr.append(y_train[i%train_length])
@@ -282,14 +285,15 @@ def convlstm():
     file_list = listfiles(test_data_dir)
     res = []
     i=0
-    test_state_value = (initial_state.eval(feed_dict = {tst:True}))[0]
+    test_state_value = sess.run(initial_state,feed_dict = {bs:1})
     for file in file_list:
         test_arr= getTrainData(file)
         feed_dict = {x:test_arr,keep_prob:1, iter:t_count,tst:True}
-        feed_dict[initial_state.c] = test_state_value[0]
-        feed_dict[initial_state.h] = test_state_value[1]
+        for j, (c, h) in enumerate(initial_state):
+            feed_dict[c] = test_state_value[j].c
+            feed_dict[h] = test_state_value[j].h
         predict_y = y_res.eval(feed_dict)
-        res.append(predict_y)
+        res.append(predict_y[0])
   
         # if i%batch_size==0 and not i==0:
             # predict_y = y_res.eval(feed_dict = {x:x_arr,keep_prob:1, iter:t_count,tst:True,state_placeholder:initialstate})
