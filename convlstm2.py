@@ -173,21 +173,19 @@ def lstmcell(keep_prob):
     lstm_cell = rnn.BasicLSTMCell(hidden_size, forget_bias=1.0, reuse=tf.get_variable_scope().reuse)
     lstm_cell = tf.contrib.rnn.DropoutWrapper(lstm_cell, output_keep_prob = keep_prob)
     return lstm_cell
+
+def lstmbase(bs,keep_prob):
+    cell = tf.contrib.rnn.MultiRNNCell([lstmcell(keep_prob) for _ in range(num_layers)],state_is_tuple = True)
+    initial_state = cell.zero_state(bs,tf.float32)   
+    return cell,initial_state
     
-def lstm(x,category,keep_prob,state):
+def lstm(x,category,keep_prob,cell,state):
     # printtensor(x) 
     x = tf.reshape(x,[-1,pic_length, fc_hidden_num])
     
     # l = tf.unstack(state_placeholder, axis=0)
     # rnn_tuple_state = tuple([tf.contrib.rnn.LSTMStateTuple(l[idx][0], l[idx][1]) for idx in range(num_layers)])
     with tf.variable_scope('lstm1') as scope:
-        # lstm_cell = rnn.BasicLSTMCell(hidden_size, forget_bias=1.0,state_is_tuple=True)
-        # lstm_cell = tf.contrib.rnn.DropoutWrapper(lstm_cell, output_keep_prob = keep_prob)
-        cell = tf.contrib.rnn.MultiRNNCell([lstmcell(keep_prob) for _ in range(num_layers)],state_is_tuple = True)
-        # print(x.get_shape().as_list())
-        # (outputs, state) = cell(x, state,)
-        # x = tf.split(x,1024,1)
-        # print(x)
         outputs = []
         w = weight_variable([hidden_size, category])
         b = bias_variable([category])
@@ -211,7 +209,7 @@ def convlstm():
     tst = tf.placeholder(tf.bool)
     iter = tf.placeholder(tf.int32)
     lr = tf.placeholder(tf.float32)
-    init_state_copy = initial_state = tf.cond(tst, lambda: tf.zeros([batch_size, hidden_size]), lambda: tf.zeros([1, hidden_size]))
+    # init_state_copy = initial_state = tf.cond(tst, lambda: tf.zeros([batch_size, hidden_size]), lambda: tf.zeros([1, hidden_size]))
     # initial_state = tf.zeros([batch_size, hidden_size])
     # test_state =  tf.zeros([1, hidden_size])
     # state_placeholder = tf.placeholder(tf.float32, [num_layers, 2, None, hidden_size])
@@ -219,11 +217,11 @@ def convlstm():
     x = tf.placeholder(tf.float32,[None,pic_size*pic_size*channels])
     y = tf.placeholder(tf.float32,shape = [None, category])
     keep_prob = tf.placeholder(tf.float32)
-
+    bs = tf.placeholder(tf.int32)
     x_img = tf.reshape(x,[-1, pic_size, pic_size, channels])
     conv_output,update_ema = conv(x_img,tst,keep_prob)
-    
-    y_pred,rnn_tuple_state= lstm(conv_output,category,keep_prob,initial_state)
+    cell,initial_state =  lstmbase(bs,keep_prob)
+    y_pred,state= lstm(conv_output,category,keep_prob,cell,initial_state)
     # y_pred = tf.reduce_mean(y_pred, 0)
     
     y_res = tf.argmax(y_pred, 1)
@@ -243,20 +241,24 @@ def convlstm():
     y_arr = []
     i=0
     train_length = len(train_files)
-    
-    state = initial_state.eval(feed_dict = {tst:False})
-    test_state = init_state_copy.eval(feed_dict = {tst:True})
+    print(initial_state)
+    state_value = sess.run(initial_state,feed_dict = {bs:32})
+    test_state_value = sess.run(initial_state,feed_dict = {bs:1})
     for k in range(epochs):
         for file in train_files:
             train_x= getTrainData(file)
             if i%batch_size==0 and not i==0:
                 learning_rate = min_learning_rate + (max_learning_rate - min_learning_rate) * math.exp(-t_count/decay_speed)
-                state,_,train_accuracy,loss,_=sess.run([rnn_tuple_state,optimizer, accuracy,cost,update_ema], 
-                feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False,initial_state:state})
+                feed_dict = {x:x_arr,y:y_arr,keep_prob:dropout_prob, iter:t_count, lr:learning_rate,tst:False}
+                
+                feed_dict[initial_state.c] = state_value[0]
+                feed_dict[initial_state.h] = state_value[1]
+                state_value,_,train_accuracy,loss,_=sess.run([state,optimizer, accuracy,cost,update_ema], feed_dict)
                 print("step %d, epoch %d, accuracy %g,loss %g"%(i/batch_size,int(i/train_length),train_accuracy,loss))
                 t_count+=1  
                 x_arr = []
                 y_arr = []
+                state_value = (initial_state.eval(feed_dict = {tst:False}))[0]
             if i%train_length==0 and not i==0:
                 # state = initial_state.eval()
                 valid_arr = []
@@ -265,8 +267,12 @@ def convlstm():
                 ground_ys = np.argmax(y_test,1)
                 for f in test_files:
                     valid_x = getTrainData(f)
-                    predict_y = y_res.eval(feed_dict = {x:valid_x,keep_prob:1, iter:t_count,tst:True,initial_state:test_state})
+                    feed_dict = {x:valid_x,keep_prob:1, iter:t_count,tst:True}
+                    feed_dict[initial_state.c] = test_state_value[0]
+                    feed_dict[initial_state.h] = test_state_value[1]
+                    predict_y = y_res.eval(feed_dict)
                     predict_ys.append(predict_y)
+                    test_state_value = (initial_state.eval(feed_dict = {tst:True}))[0]
                 accurate = rmse(predict_ys,ground_ys)
                 print("epcho %d accuracy %g"%(int(i/train_length), accurate))
             y_arr.append(y_train[i%train_length])
@@ -276,10 +282,13 @@ def convlstm():
     file_list = listfiles(test_data_dir)
     res = []
     i=0
-    x_arr = []
+    test_state_value = (initial_state.eval(feed_dict = {tst:True}))[0]
     for file in file_list:
         test_arr= getTrainData(file)
-        predict_y = y_res.eval(feed_dict = {x:x_arr,keep_prob:1, iter:t_count,tst:True,initial_state:test_state})
+        feed_dict = {x:test_arr,keep_prob:1, iter:t_count,tst:True}
+        feed_dict[initial_state.c] = test_state_value[0]
+        feed_dict[initial_state.h] = test_state_value[1]
+        predict_y = y_res.eval(feed_dict)
         res.append(predict_y)
   
         # if i%batch_size==0 and not i==0:
